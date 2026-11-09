@@ -55,6 +55,10 @@ const WAITING_PATTERNS = [
   /^\s*[›❯▶>]\s*\d+[.)]\s+\S/m,
 ];
 
+function validSize(n: unknown, max: number): number | undefined {
+  return typeof n === "number" && Number.isInteger(n) && n >= 10 && n <= max ? n : undefined;
+}
+
 export function autoName(text: string): string {
   const t = text.replace(/\s+/g, " ").trim();
   if (!t) return "";
@@ -74,6 +78,8 @@ export class SessionManager {
   private shotTimers = new Map<string, NodeJS.Timeout>();
   private pollTimer?: NodeJS.Timeout;
   private lastCapture = new Map<string, number>();
+  /** Last terminal size a phone reported; new sessions start at it so TUIs draw at the right width. */
+  private lastTermSize = { cols: 80, rows: 24 };
   readonly outputs: OutputsTracker;
 
   constructor(cfg: Config, store: Store) {
@@ -212,9 +218,10 @@ export class SessionManager {
           AGENT_HUB_SESSION: id,
           AGENT_HUB_URL: `http://127.0.0.1:${this.cfg.port}`,
         },
-        cols: params.cols,
-        rows: params.rows,
+        cols: validSize(params.cols, 500) ?? this.lastTermSize.cols,
+        rows: validSize(params.rows, 300) ?? this.lastTermSize.rows,
       });
+      console.log(`${id}: ${s.agent} in ${folder} at ${validSize(params.cols, 500) ?? this.lastTermSize.cols}x${validSize(params.rows, 300) ?? this.lastTermSize.rows}`);
       this.setStatus(s, "running");
       if (params.firstPrompt?.trim()) void this.typeWhenReady(s, params.firstPrompt);
     } else {
@@ -440,6 +447,7 @@ export class SessionManager {
   subscribeTerminal(id: string, clientId: string, cols?: number, rows?: number): void {
     const s = this.get(id);
     if (s.mode !== "terminal") return;
+    if (validSize(cols, 500) && validSize(rows, 300)) this.lastTermSize = { cols: cols!, rows: rows! };
     let b = this.bridges.get(id);
     if (!b) {
       b = new TerminalBridge(id);
@@ -465,6 +473,7 @@ export class SessionManager {
   }
 
   terminalResize(id: string, cols: number, rows: number): void {
+    if (validSize(cols, 500) && validSize(rows, 300)) this.lastTermSize = { cols, rows };
     this.bridges.get(id)?.resize(cols, rows);
   }
 

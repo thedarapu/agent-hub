@@ -68,6 +68,13 @@ struct RootView: View {
                 )
             }
             .background(Theme.bg)
+            .background {
+                GeometryReader { g in
+                    Color.clear
+                        .onAppear { store.contentSize = g.size }
+                        .onChange(of: g.size) { _, sz in store.contentSize = sz }
+                }
+            }
             .alert("Something went wrong", isPresented: Binding(get: { store.lastError != nil }, set: { if !$0 { store.lastError = nil } })) {
                 Button("OK", role: .cancel) {}
             } message: {

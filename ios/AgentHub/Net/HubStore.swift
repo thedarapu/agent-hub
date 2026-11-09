@@ -210,6 +210,13 @@ final class HubStore {
             // Resubscribe and catch up on anything missed while away.
             for (id, size) in subscriptions { subscribe(id, cols: size.cols, rows: size.rows) }
             for id in transcripts.keys { Task { await loadTranscript(id) } }
+            #if DEBUG
+            if let a = ProcessInfo.processInfo.environment["AGENTHUB_AUTOSTART"], let kind = AgentKind(rawValue: a), selectedSessionId == nil {
+                draftAgent = kind
+                draftFolder = ProcessInfo.processInfo.environment["AGENTHUB_FOLDER"] ?? draftFolder
+                Task { await createSession(prompt: nil) }
+            }
+            #endif
         case "session.updated":
             guard let m = try? dec.decode(SessionMsg.self, from: data) else { return }
             if let i = sessions.firstIndex(where: { $0.id == m.session.id }) { sessions[i] = m.session }
@@ -315,6 +322,23 @@ final class HubStore {
         var flags: String
         var sshHost: String?
         var firstPrompt: String?
+        var cols: Int?
+        var rows: Int?
+    }
+
+    /// Screen size of the main content, set by the root view; used to size new terminals.
+    @ObservationIgnored var contentSize: CGSize = .zero
+
+    /// Estimate the terminal grid the session screen will show, so the agent's
+    /// first screen is drawn at the phone's width (TUIs don't reflow old output).
+    func estimatedTerminalSize() -> (cols: Int, rows: Int)? {
+        guard contentSize.width > 0 else { return nil }
+        let font = UIFont.monospacedSystemFont(ofSize: TerminalMetrics.fontSize, weight: .regular)
+        let cw = ("W" as NSString).size(withAttributes: [.font: font]).width
+        let width = contentSize.width - TerminalMetrics.horizontalInset
+        let height = contentSize.height - TerminalMetrics.verticalChrome
+        guard cw > 0, width > 0, height > 0 else { return nil }
+        return (max(20, Int(width / cw)), max(8, Int(height / font.lineHeight)))
     }
 
     @discardableResult
@@ -322,7 +346,9 @@ final class HubStore {
         guard let api else { return nil }
         let body = CreateBody(folder: draftFolder, agent: draftAgent, flags: draftFlags,
                               sshHost: draftAgent == .ssh ? draftSSHHost : nil,
-                              firstPrompt: (prompt?.isEmpty ?? true) ? nil : prompt)
+                              firstPrompt: (prompt?.isEmpty ?? true) ? nil : prompt,
+                              cols: draftAgent.isStructured ? nil : estimatedTerminalSize()?.cols,
+                              rows: draftAgent.isStructured ? nil : estimatedTerminalSize()?.rows)
         do {
             let s: Session = try await api.send("POST", "/sessions", body: body)
             if !sessions.contains(where: { $0.id == s.id }) { sessions.insert(s, at: 0) }

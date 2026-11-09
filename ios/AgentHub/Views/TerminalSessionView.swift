@@ -79,6 +79,15 @@ struct TerminalSessionView: View {
     }
 }
 
+/// Layout constants shared with HubStore.estimatedTerminalSize().
+enum TerminalMetrics {
+    static let fontSize: CGFloat = 12
+    /// 12pt outer padding ×2 + 8pt inner padding ×2.
+    static let horizontalInset: CGFloat = 40
+    /// Header, key row, composer and pane padding (approximate).
+    static let verticalChrome: CGFloat = 250
+}
+
 struct TerminalPane: UIViewRepresentable {
     let sessionId: String
     @Environment(HubStore.self) private var store
@@ -90,7 +99,7 @@ struct TerminalPane: UIViewRepresentable {
         tv.terminalDelegate = context.coordinator
         tv.nativeBackgroundColor = UIColor(hex: 0x1C1B19)
         tv.nativeForegroundColor = UIColor(hex: 0xE8E4DA)
-        tv.font = UIFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        tv.font = UIFont.monospacedSystemFont(ofSize: TerminalMetrics.fontSize, weight: .regular)
         tv.inputAccessoryView = nil // the app has its own key row
         tv.optionAsMetaKey = true
         context.coordinator.view = tv
