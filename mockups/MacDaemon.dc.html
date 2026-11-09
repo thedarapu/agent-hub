@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mac daemon menu</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Source+Serif+4:wght@400;500&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#1F1E1B}a:hover{color:#000000}
+</style>
+</helmet>
+<div style="width: 340px; height: 560px; box-sizing: border-box; background: #F7F5F0; border: 1px solid #E3DED4; border-radius: 16px; color: #1F1E1B; font-family: Inter, system-ui, sans-serif; display: flex; flex-direction: column; overflow: hidden">
+
+<header style="padding: 20px 20px 16px; display: flex; flex-direction: column; gap: 4px">
+<div style="display: flex; align-items: center; justify-content: space-between">
+<h1 style="margin: 0; font-family: 'Source Serif 4', Georgia, serif; font-size: 22px; font-weight: 500">agent-hub</h1>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #3E7D4F"><span style="width: 7px; height: 7px; border-radius: 4px; background: #3E7D4F"></span>Running</span>
+</div>
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #6B6860">bharath-mbp:7420 · Tailscale</span>
+</header>
+
+<section aria-label="Settings" style="margin: 0 12px; padding: 2px 14px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E3DED4; display: flex; flex-direction: column">
+<div style="display: flex; align-items: center; justify-content: space-between; min-height: 44px; border-bottom: 1px solid #EFEBE3">
+<span style="font-size: 14px">Keep Mac awake</span>
+<span aria-hidden="true" style="width: 38px; height: 22px; border-radius: 11px; background: #1F1E1B; position: relative"><span style="position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 9px; background: #FFFFFF"></span></span>
+</div>
+<div style="display: flex; align-items: center; justify-content: space-between; min-height: 44px">
+<span style="font-size: 14px">Tailscale only</span>
+<span aria-hidden="true" style="width: 38px; height: 22px; border-radius: 11px; background: #1F1E1B; position: relative"><span style="position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 9px; background: #FFFFFF"></span></span>
+</div>
+</section>
+
+<section aria-label="Sessions" style="flex: 1; padding: 22px 20px 0; display: flex; flex-direction: column; gap: 16px">
+<h2 style="margin: 0; font-size: 13px; font-weight: 600; color: #6B6860">Sessions</h2>
+<div style="display: flex; align-items: center; gap: 10px">
+<span style="width: 8px; height: 8px; border-radius: 4px; background: #C96442"></span>
+<span style="font-size: 14px; font-weight: 500">binge</span>
+<span style="font-size: 13px; color: #6B6860">Claude</span>
+<span style="margin-left: auto; font-size: 13px; color: #A35F00">needs you</span>
+</div>
+<div style="display: flex; align-items: center; gap: 10px">
+<span style="width: 8px; height: 8px; border-radius: 4px; background: #2F6FDB"></span>
+<span style="font-size: 14px; font-weight: 500">feed-app</span>
+<span style="font-size: 13px; color: #6B6860">Codex</span>
+<span style="margin-left: auto; font-size: 13px; color: #6B6860">running</span>
+</div>
+<div style="display: flex; align-items: center; gap: 10px">
+<span style="width: 8px; height: 8px; border-radius: 4px; background: #7B5BD6"></span>
+<span style="font-size: 14px; font-weight: 500">podcast-app</span>
+<span style="font-size: 13px; color: #6B6860">Amp</span>
+<span style="margin-left: auto; font-size: 13px; color: #6B6860">running</span>
+</div>
+<div style="display: flex; align-items: center; gap: 10px">
+<span style="width: 8px; height: 8px; border-radius: 4px; border: 1.5px solid #5E5B54; box-sizing: border-box"></span>
+<span style="font-size: 14px; font-weight: 500">homeserver</span>
+<span style="font-size: 13px; color: #6B6860">SSH</span>
+<span style="margin-left: auto; font-size: 13px; color: #6B6860">idle</span>
+</div>
+</section>
+
+<footer style="padding: 12px; display: flex; gap: 8px">
+<button style="flex: 1; height: 36px; border: 1px solid #E3DED4; border-radius: 10px; background: #FFFFFF; color: #1F1E1B; font-family: Inter, sans-serif; font-size: 13px">Activity log</button>
+<button style="flex: 1; height: 36px; border: 1px solid #E3DED4; border-radius: 10px; background: #FFFFFF; color: #1F1E1B; font-family: Inter, sans-serif; font-size: 13px">Settings</button>
+<button style="height: 36px; padding: 0 14px; border: 0; border-radius: 10px; background: transparent; color: #6B6860; font-family: Inter, sans-serif; font-size: 13px">Quit</button>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":340,"height":560}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>
