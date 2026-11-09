@@ -73,6 +73,7 @@ final class HubStore {
             Keychain.save(p)
         }
         selectedSessionId = ProcessInfo.processInfo.environment["AGENTHUB_OPEN_SESSION"]
+        drawerOpen = ProcessInfo.processInfo.environment["AGENTHUB_OPEN_DRAWER"] != nil
         #endif
         if let p = Keychain.load() {
             pairing = p

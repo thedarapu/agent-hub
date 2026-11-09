@@ -56,8 +56,14 @@ final class BarModel {
 
     private var timer: Timer?
 
-    static let configURL = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent("Library/Application Support/agent-hub/config.json")
+    /// Same override as the daemon (AGENT_HUB_DATA) so a dev daemon can be paired with a dev bar.
+    static let configURL: URL = {
+        if let d = ProcessInfo.processInfo.environment["AGENT_HUB_DATA"] {
+            return URL(fileURLWithPath: d).appendingPathComponent("config.json")
+        }
+        return FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/agent-hub/config.json")
+    }()
 
     var config: DaemonConfig? {
         guard let d = try? Data(contentsOf: Self.configURL) else { return nil }
@@ -131,6 +137,12 @@ struct AgentHubBarApp: App {
         Window("Pair iPhone", id: "pair") { PairWindow().environment(model) }
             .windowResizability(.contentSize)
         Window("Activity log", id: "activity") { ActivityWindow().environment(model) }
+        #if DEBUG
+        // Dev aid: the menu contents in a normal window (for screenshots / UI work).
+        Window("agent-hub menu", id: "menu-preview") { MenuPreview().environment(model) }
+            .windowResizability(.contentSize)
+            .defaultLaunchBehavior(ProcessInfo.processInfo.environment["AGENTHUB_MENU_PREVIEW"] != nil ? .presented : .suppressed)
+        #endif
     }
 }
 
@@ -201,6 +213,17 @@ struct BarMenu: View {
     }
 }
 
+#if DEBUG
+struct MenuPreview: View {
+    @Environment(\.openWindow) private var openWindow
+    var body: some View {
+        BarMenu().onAppear {
+            if ProcessInfo.processInfo.environment["AGENTHUB_OPEN_PAIR"] != nil { openWindow(id: "pair") }
+        }
+    }
+}
+#endif
+
 struct PairWindow: View {
     @Environment(BarModel.self) private var model
     @State private var image: NSImage?
@@ -208,8 +231,11 @@ struct PairWindow: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            Text("Scan with agent-hub on your iPhone").font(.headline)
-            if let image {
+            Text(info != nil && info?.host == nil ? "Tailscale needed to pair" : "Scan with agent-hub on your iPhone").font(.headline)
+            if info?.host == nil && info != nil {
+                Image(systemName: "network.slash").font(.system(size: 64)).foregroundStyle(.secondary)
+                    .frame(width: 260, height: 160)
+            } else if let image {
                 Image(nsImage: image).interpolation(.none).resizable().frame(width: 260, height: 260)
             } else {
                 ProgressView().frame(width: 260, height: 260)
@@ -218,6 +244,7 @@ struct PairWindow: View {
                 if info.host == nil {
                     Text("Tailscale isn't running on this Mac. Install and sign in to Tailscale, then reopen this window.")
                         .foregroundStyle(.orange).multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
                 } else {
                     Text("\(info.host!):\(info.port)").font(.system(.body, design: .monospaced))
                 }
