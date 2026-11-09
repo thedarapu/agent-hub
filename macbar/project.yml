@@ -1,0 +1,30 @@
+name: AgentHubBar
+options:
+  bundleIdPrefix: com.bharath
+  deploymentTarget:
+    macOS: "14.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+    CODE_SIGN_IDENTITY: "-"
+targets:
+  AgentHubBar:
+    type: application
+    platform: macOS
+    sources: [AgentHubBar]
+    info:
+      path: AgentHubBar/Info.plist
+      properties:
+        CFBundleDisplayName: agent-hub
+        LSUIElement: true
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.bharath.agenthub.bar
+        ENABLE_HARDENED_RUNTIME: NO
+        # Reads ~/Library/Application Support/agent-hub/config.json for the token.
+        ENABLE_APP_SANDBOX: NO

@@ -1,0 +1,842 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-hub/protocol",
+  "title": "agent-hub wire protocol",
+  "description": "Source of truth for daemon <-> phone messages. HTTP routes are listed in README.md. Keep daemon/src/types.ts and ios/AgentHub/Model/Models.swift in sync.",
+  "$defs": {
+    "AgentKind": {
+      "enum": [
+        "claude",
+        "codex",
+        "amp",
+        "shell",
+        "ssh"
+      ]
+    },
+    "SessionStatus": {
+      "enum": [
+        "starting",
+        "running",
+        "waiting",
+        "idle",
+        "done",
+        "error",
+        "stopped"
+      ]
+    },
+    "Session": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "stable id, also the tmux session name, e.g. s-7f3a"
+        },
+        "name": {
+          "type": "string"
+        },
+        "folder": {
+          "type": "string",
+          "description": "absolute path inside the base folder"
+        },
+        "agent": {
+          "$ref": "#/$defs/AgentKind"
+        },
+        "mode": {
+          "enum": [
+            "structured",
+            "terminal"
+          ]
+        },
+        "flags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sshHost": {
+          "type": "string"
+        },
+        "agentSessionId": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/SessionStatus"
+        },
+        "statusDetail": {
+          "type": "string"
+        },
+        "pinned": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "lastActivityAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "folder",
+        "agent",
+        "mode",
+        "flags",
+        "status",
+        "pinned",
+        "createdAt",
+        "updatedAt",
+        "lastActivityAt"
+      ]
+    },
+    "TranscriptEvent": {
+      "type": "object",
+      "properties": {
+        "seq": {
+          "type": "integer"
+        },
+        "ts": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "kind": {
+          "enum": [
+            "user",
+            "assistant",
+            "thinking",
+            "tool_use",
+            "tool_result",
+            "approval",
+            "output",
+            "result",
+            "system"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "toolUseId": {
+          "type": "string"
+        },
+        "tool": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "input": {},
+        "isError": {
+          "type": "boolean"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "decision": {
+          "enum": [
+            "allow",
+            "always",
+            "deny",
+            "expired"
+          ]
+        },
+        "outputId": {
+          "type": "string"
+        },
+        "output": {
+          "$ref": "#/$defs/Output"
+        },
+        "durationMs": {
+          "type": "number"
+        },
+        "costUsd": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "seq",
+        "ts",
+        "kind"
+      ]
+    },
+    "Output": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "folder": {
+          "type": "string"
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "latestSessionId": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "page",
+            "image",
+            "markdown",
+            "changes"
+          ]
+        },
+        "relpath": {
+          "type": "string",
+          "description": "relative to the project; for changes, the stored .diff"
+        },
+        "source": {
+          "enum": [
+            "tool",
+            "watcher",
+            "simulator",
+            "mac"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "additions": {
+          "type": "integer"
+        },
+        "deletions": {
+          "type": "integer"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        },
+        "versionCount": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "folder",
+        "sessionId",
+        "kind",
+        "relpath",
+        "source",
+        "createdAt",
+        "updatedAt",
+        "versionCount"
+      ]
+    },
+    "OutputVersion": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "outputId": {
+          "type": "string"
+        },
+        "n": {
+          "type": "integer"
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "sha1": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer"
+        },
+        "storedPath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "outputId",
+        "n",
+        "sessionId",
+        "createdAt",
+        "sha1",
+        "size",
+        "storedPath"
+      ]
+    },
+    "Approval": {
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string"
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "tool": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "input": {},
+        "createdAt": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "requestId",
+        "sessionId",
+        "tool",
+        "summary"
+      ]
+    },
+    "MacStatus": {
+      "type": "object",
+      "properties": {
+        "hostname": {
+          "type": "string"
+        },
+        "keepAwake": {
+          "type": "boolean"
+        },
+        "tailscaleIp": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tailscaleOnly": {
+          "type": "boolean"
+        },
+        "listening": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "port": {
+          "type": "integer"
+        },
+        "baseFolder": {
+          "type": "string"
+        },
+        "sshHosts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "agents": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "clients": {
+          "type": "integer"
+        }
+      }
+    },
+    "Pairing": {
+      "type": "object",
+      "properties": {
+        "host": {
+          "type": "string"
+        },
+        "port": {
+          "type": "integer"
+        },
+        "token": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "host",
+        "port",
+        "token"
+      ]
+    },
+    "server:hello": {
+      "type": "object",
+      "properties": {
+        "sessions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Session"
+          }
+        },
+        "mac": {
+          "$ref": "#/$defs/MacStatus"
+        },
+        "approvals": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Approval"
+          }
+        },
+        "type": {
+          "const": "hello"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    "server:session.updated": {
+      "type": "object",
+      "properties": {
+        "session": {
+          "$ref": "#/$defs/Session"
+        },
+        "type": {
+          "const": "session.updated"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    "server:session.deleted": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        },
+        "type": {
+          "const": "session.deleted"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    "server:transcript.event": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        },
+        "event": {
+          "$ref": "#/$defs/TranscriptEvent"
+        },
+        "type": {
+          "const": "transcript.event"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    "server:transcript.delta": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string",
+          "description": "streamed assistant text; transient, superseded by the next assistant event"
+        },
+        "type": {
+          "const": "transcript.delta"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    "server:terminal.data": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        },
+        "data": {
+          "type": "string",
+          "description": "base64 bytes"
+        },
+        "type": {
+          "const": "terminal.data"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    "server:approval.request": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "tool": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "input": {},
+        "sessionName": {
+          "type": "string"
+        },
+        "type": {
+          "const": "approval.request"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    "server:approval.resolved": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "decision": {
+          "type": "string"
+        },
+        "type": {
+          "const": "approval.resolved"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    "server:output.added": {
+      "type": "object",
+      "properties": {
+        "output": {
+          "$ref": "#/$defs/Output"
+        },
+        "version": {
+          "$ref": "#/$defs/OutputVersion"
+        },
+        "type": {
+          "const": "output.added"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    "server:mac.updated": {
+      "type": "object",
+      "properties": {
+        "mac": {
+          "$ref": "#/$defs/MacStatus"
+        },
+        "type": {
+          "const": "mac.updated"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    "server:ack": {
+      "type": "object",
+      "properties": {
+        "ref": {},
+        "type": {
+          "const": "ack"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    "server:error": {
+      "type": "object",
+      "properties": {
+        "ref": {},
+        "message": {
+          "type": "string"
+        },
+        "type": {
+          "const": "error"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    "server:pong": {
+      "type": "object",
+      "properties": {
+        "ref": {},
+        "type": {
+          "const": "pong"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    "server:subscribed": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        },
+        "type": {
+          "const": "subscribed"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    "phone:subscribe": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        },
+        "cols": {
+          "type": "integer"
+        },
+        "rows": {
+          "type": "integer"
+        },
+        "type": {
+          "const": "subscribe"
+        }
+      },
+      "required": [
+        "type",
+        "sessionId"
+      ]
+    },
+    "phone:unsubscribe": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        },
+        "type": {
+          "const": "unsubscribe"
+        }
+      },
+      "required": [
+        "type",
+        "sessionId"
+      ]
+    },
+    "phone:prompt.send": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "ref": {},
+        "type": {
+          "const": "prompt.send"
+        }
+      },
+      "required": [
+        "type",
+        "sessionId",
+        "text"
+      ]
+    },
+    "phone:terminal.input": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        },
+        "data": {
+          "type": "string",
+          "description": "base64"
+        },
+        "type": {
+          "const": "terminal.input"
+        }
+      },
+      "required": [
+        "type",
+        "sessionId",
+        "data"
+      ]
+    },
+    "phone:terminal.resize": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        },
+        "cols": {
+          "type": "integer"
+        },
+        "rows": {
+          "type": "integer"
+        },
+        "type": {
+          "const": "terminal.resize"
+        }
+      },
+      "required": [
+        "type",
+        "sessionId",
+        "cols",
+        "rows"
+      ]
+    },
+    "phone:approval.respond": {
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string"
+        },
+        "decision": {
+          "enum": [
+            "allow",
+            "always",
+            "deny"
+          ]
+        },
+        "ref": {},
+        "type": {
+          "const": "approval.respond"
+        }
+      },
+      "required": [
+        "type",
+        "requestId",
+        "decision"
+      ]
+    },
+    "phone:session.interrupt": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        },
+        "type": {
+          "const": "session.interrupt"
+        }
+      },
+      "required": [
+        "type",
+        "sessionId"
+      ]
+    },
+    "phone:ping": {
+      "type": "object",
+      "properties": {
+        "ref": {},
+        "type": {
+          "const": "ping"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/server:hello"
+    },
+    {
+      "$ref": "#/$defs/server:session.updated"
+    },
+    {
+      "$ref": "#/$defs/server:session.deleted"
+    },
+    {
+      "$ref": "#/$defs/server:transcript.event"
+    },
+    {
+      "$ref": "#/$defs/server:transcript.delta"
+    },
+    {
+      "$ref": "#/$defs/server:terminal.data"
+    },
+    {
+      "$ref": "#/$defs/server:approval.request"
+    },
+    {
+      "$ref": "#/$defs/server:approval.resolved"
+    },
+    {
+      "$ref": "#/$defs/server:output.added"
+    },
+    {
+      "$ref": "#/$defs/server:mac.updated"
+    },
+    {
+      "$ref": "#/$defs/server:ack"
+    },
+    {
+      "$ref": "#/$defs/server:error"
+    },
+    {
+      "$ref": "#/$defs/server:pong"
+    },
+    {
+      "$ref": "#/$defs/server:subscribed"
+    },
+    {
+      "$ref": "#/$defs/phone:subscribe"
+    },
+    {
+      "$ref": "#/$defs/phone:unsubscribe"
+    },
+    {
+      "$ref": "#/$defs/phone:prompt.send"
+    },
+    {
+      "$ref": "#/$defs/phone:terminal.input"
+    },
+    {
+      "$ref": "#/$defs/phone:terminal.resize"
+    },
+    {
+      "$ref": "#/$defs/phone:approval.respond"
+    },
+    {
+      "$ref": "#/$defs/phone:session.interrupt"
+    },
+    {
+      "$ref": "#/$defs/phone:ping"
+    }
+  ]
+}
