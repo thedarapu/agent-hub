@@ -1,0 +1,44 @@
+name: AgentHub
+options:
+  bundleIdPrefix: com.bharath
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    # Set your (free) Personal Team in Xcode → Signing & Capabilities.
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+packages:
+  SwiftTerm:
+    url: https://github.com/migueldeicaza/SwiftTerm
+    from: "1.2.0"
+targets:
+  AgentHub:
+    type: application
+    platform: iOS
+    sources: [AgentHub]
+    dependencies:
+      - package: SwiftTerm
+    info:
+      path: AgentHub/Support/Info.plist
+      properties:
+        CFBundleDisplayName: agent-hub
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        NSCameraUsageDescription: Scan the pairing QR code shown by agent-hub on your Mac.
+        NSLocalNetworkUsageDescription: Connects to agent-hub on your Mac over Tailscale.
+        NSMicrophoneUsageDescription: Dictate messages to your agents.
+        NSSpeechRecognitionUsageDescription: Dictate messages to your agents.
+        NSAppTransportSecurity:
+          # The daemon speaks plain HTTP over Tailscale (WireGuard-encrypted).
+          NSAllowsArbitraryLoads: true
+          NSAllowsLocalNetworking: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.bharath.agenthub
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "1"
