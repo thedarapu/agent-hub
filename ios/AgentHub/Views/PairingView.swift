@@ -73,6 +73,7 @@ struct PairingView: View {
             error = nil
             store.pair(p)
         } catch {
+            print("pairing connect to \(p.host):\(p.port) failed: \(String(reflecting: error))")
             self.error = "Couldn't reach \(p.host):\(p.port) — \(error.localizedDescription). Is Tailscale on for both devices?"
         }
     }

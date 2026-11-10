@@ -35,10 +35,11 @@ targets:
         NSSpeechRecognitionUsageDescription: Dictate messages to your agents.
         NSAppTransportSecurity:
           # The daemon speaks plain HTTP over Tailscale (WireGuard-encrypted).
+          # Don't add NSAllowsLocalNetworking: when present, iOS ignores
+          # NSAllowsArbitraryLoads, and 100.x Tailscale IPs aren't "local".
           NSAllowsArbitraryLoads: true
-          NSAllowsLocalNetworking: true
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.bharath.agenthub
+        PRODUCT_BUNDLE_IDENTIFIER: com.darapu.tangent
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         TARGETED_DEVICE_FAMILY: "1"
