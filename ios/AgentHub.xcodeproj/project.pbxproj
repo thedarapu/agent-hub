@@ -20,6 +20,7 @@
 		6AC8429774B177158194B5AB /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2530C4DAF2D282697076B5B0 /* Assets.xcassets */; };
 		6B6BD7B3E383B26BCA3316A9 /* DrawerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D36D1BFC167E690D8A1BE3E /* DrawerView.swift */; };
 		853C9DC2C487011D4B829D62 /* TerminalSessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F39FD2164347B4CBF125183 /* TerminalSessionView.swift */; };
+		89F4742033A9B26A1529F1CB /* ResumeClaudeSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 436176AE4C46C39730918C1C /* ResumeClaudeSheet.swift */; };
 		A1A21C0FC2974D14E8C5FD15 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F18820B3B5CA4002C315E24 /* APIClient.swift */; };
 		AF21CBE7FCF8C41E103DA57F /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48778CA701837FA8E762DB5C /* Models.swift */; };
 		BFDC1CCFEC4A20CA3804FDEF /* MacSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9ED5EE3D52747B77DDA3724 /* MacSheet.swift */; };
@@ -40,6 +41,7 @@
 		336AC9274527F3A703DBED96 /* SessionMenuSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionMenuSheet.swift; sourceTree = "<group>"; };
 		3CD259BCE40A281FDF08ECE4 /* HubStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HubStore.swift; sourceTree = "<group>"; };
 		4354C959FC5D890FC156FC68 /* Keychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keychain.swift; sourceTree = "<group>"; };
+		436176AE4C46C39730918C1C /* ResumeClaudeSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResumeClaudeSheet.swift; sourceTree = "<group>"; };
 		48778CA701837FA8E762DB5C /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		87CF78C83C1F6271447FF8A7 /* AgentHub.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = AgentHub.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8D36D1BFC167E690D8A1BE3E /* DrawerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DrawerView.swift; sourceTree = "<group>"; };
@@ -89,6 +91,7 @@
 				2AF8BAE70F7F934B6E0962F6 /* OutputsView.swift */,
 				DC5DA05E2228B46651D361A0 /* OutputViewer.swift */,
 				036A440E56F0BB4789EEDEB9 /* PairingView.swift */,
+				436176AE4C46C39730918C1C /* ResumeClaudeSheet.swift */,
 				336AC9274527F3A703DBED96 /* SessionMenuSheet.swift */,
 				A7E7BD34066D2718C6A93C0D /* SessionView.swift */,
 				8F39FD2164347B4CBF125183 /* TerminalSessionView.swift */,
@@ -241,6 +244,7 @@
 				30129D3A54BA1E40B76CC280 /* OutputViewer.swift in Sources */,
 				14BF624DB14579142CABA574 /* OutputsView.swift in Sources */,
 				2DDA24003D1CE8FA25E77BED /* PairingView.swift in Sources */,
+				89F4742033A9B26A1529F1CB /* ResumeClaudeSheet.swift in Sources */,
 				081BB1758F11D1EB4F255E58 /* SessionMenuSheet.swift in Sources */,
 				14936707DF3EEB39B6F32461 /* SessionView.swift in Sources */,
 				853C9DC2C487011D4B829D62 /* TerminalSessionView.swift in Sources */,

@@ -59,6 +59,14 @@
         "agentSessionId": {
           "type": "string"
         },
+        "resumedFrom": {
+          "type": "string",
+          "description": "Claude session id this continues, when it was started outside agent-hub."
+        },
+        "forkOnResume": {
+          "type": "boolean",
+          "description": "Next start forks agentSessionId because a terminal still has it open."
+        },
         "status": {
           "$ref": "#/$defs/SessionStatus"
         },

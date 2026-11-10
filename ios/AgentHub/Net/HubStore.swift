@@ -360,6 +360,32 @@ final class HubStore {
         }
     }
 
+    // MARK: Resume Claude sessions started in a terminal
+
+    func claudeHistory(folder rel: String) async throws -> [ClaudeHistorySession] {
+        guard let api else { return [] }
+        return try await api.get("/claude-sessions", query: ["project": rel])
+    }
+
+    @discardableResult
+    func resumeClaude(_ h: ClaudeHistorySession, folder rel: String) async -> Session? {
+        if let existing = h.hubSessionId, session(existing) != nil {
+            selectedSessionId = existing
+            return session(existing)
+        }
+        guard let api else { return nil }
+        struct Body: Encodable { var folder: String; var claudeSessionId: String }
+        do {
+            let s: Session = try await api.send("POST", "/claude-sessions", body: Body(folder: rel, claudeSessionId: h.id))
+            if !sessions.contains(where: { $0.id == s.id }) { sessions.insert(s, at: 0) }
+            selectedSessionId = s.id
+            return s
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     func patch(_ id: String, name: String? = nil, pinned: Bool? = nil) async {
         struct Body: Encodable { var name: String?; var pinned: Bool? }
         do {

@@ -21,6 +21,10 @@ export interface Session {
   flags: string[];
   sshHost?: string;
   agentSessionId?: string;
+  /** Claude session this continues, when it was started outside agent-hub. */
+  resumedFrom?: string;
+  /** Next start should fork agentSessionId (the original is open in a terminal). */
+  forkOnResume?: boolean;
   status: SessionStatus;
   statusDetail?: string;
   pinned: boolean;

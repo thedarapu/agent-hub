@@ -18,6 +18,7 @@ import { ClaudeProcess, type ApprovalRequest, type NewEvent } from "./adapters/c
 import { OutputsTracker } from "./outputs.ts";
 import { safeResolve } from "./paths.ts";
 import { shellJoin, shellSplit } from "./shell.ts";
+import { listClaudeSessions, liveClaudeSessions, readHistory, sessionFile, type ClaudeHistorySession } from "./claude-history.ts";
 
 const AGENTS: AgentKind[] = ["claude", "codex", "amp", "shell", "ssh"];
 const LIVE: SessionStatus[] = ["starting", "running", "waiting", "idle"];
@@ -163,10 +164,94 @@ export class SessionManager {
     return best;
   }
 
+  // ---------- Claude sessions started outside agent-hub ----------
+
+  /** Claude sessions in a folder that agent-hub didn't start (or that it continues). */
+  claudeHistory(folderRel: string): ClaudeHistorySession[] {
+    const folder = safeResolve(this.cfg.baseFolder, folderRel);
+    const own = new Set<string>();
+    const hubByAgentId = new Map<string, string>();
+    for (const s of this.sessions.values()) {
+      if (s.agent !== "claude") continue;
+      if (s.agentSessionId) own.add(s.agentSessionId);
+      if (s.resumedFrom) hubByAgentId.set(s.resumedFrom, s.id);
+    }
+    return listClaudeSessions(folder, { ownIds: own, hubByAgentId }).filter((h) => !own.has(h.id) || hubByAgentId.has(h.id));
+  }
+
+  /**
+   * Continue a Claude session started elsewhere. Its history is copied into
+   * the transcript; the next prompt runs `claude --resume <id>`. If a CLI still
+   * has it open, the session is forked so the two don't write over each other.
+   */
+  resumeClaude(params: { folder: string; claudeSessionId: string; name?: string }, origin: string): Session {
+    const folder = safeResolve(this.cfg.baseFolder, String(params.folder ?? ""));
+    const cid = String(params.claudeSessionId ?? "");
+    for (const s of this.sessions.values())
+      if (s.agent === "claude" && (s.resumedFrom === cid || s.agentSessionId === cid)) return s;
+    const file = sessionFile(folder, cid);
+    if (!file) throw new HttpError(404, "no such Claude session in that folder");
+    const fork = liveClaudeSessions().has(cid);
+    const title = listClaudeSessions(folder).find((h) => h.id === cid)?.title;
+
+    const now = new Date().toISOString();
+    const s: Session = {
+      id: "",
+      name: params.name?.trim() || autoName(title ?? "") || `Claude Code in ${path.basename(folder)}`,
+      folder,
+      agent: "claude",
+      mode: "structured",
+      flags: [],
+      agentSessionId: cid,
+      resumedFrom: cid,
+      forkOnResume: fork || undefined,
+      status: "idle",
+      pinned: false,
+      createdAt: now,
+      updatedAt: now,
+      lastActivityAt: now,
+    };
+    return this.finishResume(s, file, fork, origin);
+  }
+
+  private finishResume(s: Session, file: string, fork: boolean, origin: string): Session {
+    s.id = "s-" + crypto.randomBytes(2).toString("hex");
+    while (this.sessions.has(s.id)) s.id = "s-" + crypto.randomBytes(2).toString("hex");
+    const history = readHistory(file, s.folder);
+    let seq = 0;
+    for (const e of history) this.store.putEvent(s.id, { ...e, seq: ++seq } as TranscriptEvent);
+    this.seqs.set(s.id, seq);
+    if (history.length) s.lastActivityAt = history[history.length - 1].ts;
+    this.sessions.set(s.id, s);
+    this.save(s);
+    this.addEvent(s.id, {
+      kind: "system",
+      text: fork
+        ? "Continued from a terminal session that is still open. Replies here go to a copy, so the terminal's conversation is unchanged."
+        : "Continued from a terminal session.",
+    });
+    this.store.logActivity(origin, "session.resume", s.id, `${s.resumedFrom}${fork ? " (fork)" : ""} in ${s.folder}`);
+    this.outputs.watch(s.folder);
+    return s;
+  }
+
   // ---------- create ----------
 
   async create(
-    params: { folder: string; agent: AgentKind; flags?: string | string[]; sshHost?: string; firstPrompt?: string; name?: string; cols?: number; rows?: number },
+    params: {
+      folder: string;
+      agent: AgentKind;
+      flags?: string | string[];
+      sshHost?: string;
+      firstPrompt?: string;
+      name?: string;
+      cols?: number;
+      rows?: number;
+      /** Run Claude as its terminal UI in tmux (as `ah claude` does) instead of structured mode. */
+      terminal?: boolean;
+      /** A Mac terminal will attach (`ah`): close the session when the agent exits. */
+      attached?: boolean;
+    },
     origin: string,
   ): Promise<Session> {
     if (!AGENTS.includes(params.agent)) throw new HttpError(400, "unknown agent");
@@ -184,7 +269,7 @@ export class SessionManager {
 
     const id = await this.newId();
     const now = new Date().toISOString();
-    const mode = params.agent === "claude" ? "structured" : "terminal";
+    const mode = params.agent === "claude" && !params.terminal ? "structured" : "terminal";
     const project = path.basename(folder);
     const s: Session = {
       id,
@@ -220,6 +305,7 @@ export class SessionManager {
         },
         cols: validSize(params.cols, 500) ?? this.lastTermSize.cols,
         rows: validSize(params.rows, 300) ?? this.lastTermSize.rows,
+        remainOnExit: !params.attached,
       });
       console.log(`${id}: ${s.agent} in ${folder} at ${validSize(params.cols, 500) ?? this.lastTermSize.cols}x${validSize(params.rows, 300) ?? this.lastTermSize.rows}`);
       this.setStatus(s, "running");
@@ -291,6 +377,7 @@ export class SessionManager {
       cwd: s.folder,
       flags: s.flags,
       resumeId: s.agentSessionId,
+      fork: s.forkOnResume,
       cb: {
         event: (e) => this.addEvent(s.id, e),
         delta: (text) => bus.publish({ type: "transcript.delta", sessionId: s.id, text }, true),
@@ -301,6 +388,7 @@ export class SessionManager {
         sessionId: (sid) => {
           if (s.agentSessionId !== sid) {
             s.agentSessionId = sid;
+            s.forkOnResume = undefined;
             this.save(s);
           }
         },

@@ -43,6 +43,7 @@ struct Session: Codable, Identifiable, Hashable {
     var flags: [String]
     var sshHost: String?
     var agentSessionId: String?
+    var resumedFrom: String?
     var status: SessionStatus
     var statusDetail: String?
     var pinned: Bool
@@ -192,6 +193,18 @@ struct Approval: Codable, Identifiable, Hashable {
     var summary: String
     var input: JSONValue?
     var id: String { requestId }
+}
+
+/// A Claude Code session started outside agent-hub (e.g. `claude` in a terminal).
+struct ClaudeHistorySession: Codable, Identifiable, Hashable {
+    var id: String
+    var folder: String
+    var title: String
+    var lastPrompt: String?
+    var promptCount: Int
+    var lastActivityAt: String
+    var openInTerminal: Bool
+    var hubSessionId: String?
 }
 
 struct FolderInfo: Codable, Identifiable, Hashable {

@@ -93,6 +93,8 @@ export class ClaudeProcess {
   private cwd: string;
   private flags: string[];
   private resumeId?: string;
+  /** Resume as a copy (--fork-session) so a CLI still using the session is untouched. */
+  private fork: boolean;
   private stderrTail = "";
   private reqCounter = 0;
   private toolNames = new Map<string, string>();
@@ -100,10 +102,11 @@ export class ClaudeProcess {
   private pendingFiles = new Map<string, { path: string; tool: string }>();
   busy = false;
 
-  constructor(opts: { cwd: string; flags: string[]; resumeId?: string; cb: ClaudeCallbacks }) {
+  constructor(opts: { cwd: string; flags: string[]; resumeId?: string; fork?: boolean; cb: ClaudeCallbacks }) {
     this.cwd = opts.cwd;
     this.flags = opts.flags;
     this.resumeId = opts.resumeId;
+    this.fork = !!opts.fork;
     this.cb = opts.cb;
   }
 
@@ -129,6 +132,7 @@ export class ClaudeProcess {
       "stdio",
     ];
     if (this.resumeId) args.push("--resume", this.resumeId);
+    if (this.resumeId && this.fork) args.push("--fork-session");
     args.push(...this.flags);
     // Login shell so the agent sees the same environment as Bharath's terminal.
     const shell = process.env.SHELL || "/bin/zsh";
@@ -223,6 +227,8 @@ export class ClaudeProcess {
     switch (m.type) {
       case "system":
         if (m.subtype === "init" && m.session_id) {
+          // Once the fork has its own id, later restarts resume the fork itself.
+          if (m.session_id !== this.resumeId) this.fork = false;
           this.resumeId = m.session_id;
           this.cb.sessionId(m.session_id);
         }

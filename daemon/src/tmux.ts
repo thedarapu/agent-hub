@@ -28,6 +28,8 @@ export async function newSession(opts: {
   env: Record<string, string>;
   cols?: number;
   rows?: number;
+  /** Keep the pane after the command exits (default). Off for sessions a Mac terminal is attached to. */
+  remainOnExit?: boolean;
 }): Promise<void> {
   const envArgs = Object.entries(opts.env).flatMap(([k, v]) => ["-e", `${k}=${v}`]);
   // One invocation so the options apply before a fast-failing command exits.
@@ -36,7 +38,7 @@ export async function newSession(opts: {
     "new-session", "-d", "-s", opts.id, "-c", opts.cwd,
     "-x", String(opts.cols ?? 80), "-y", String(opts.rows ?? 24),
     ...envArgs, opts.command,
-    ";", "set-option", "-t", opts.id, "remain-on-exit", "on",
+    ";", "set-option", "-t", opts.id, "remain-on-exit", opts.remainOnExit === false ? "off" : "on",
     ";", "set-option", "-t", opts.id, TAG, "1",
     // The app has its own chrome; size to whichever client was active last.
     ";", "set-option", "-t", opts.id, "status", "off",

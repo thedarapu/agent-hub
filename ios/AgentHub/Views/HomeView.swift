@@ -6,6 +6,7 @@ struct HomeView: View {
     @State private var text = ""
     @State private var showAgents = false
     @State private var showFolders = false
+    @State private var showResume = false
     @State private var creating = false
 
     var body: some View {
@@ -22,6 +23,9 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     if let last = store.lastSession(inFolder: store.draftFolder) {
                         quick("arrow.counterclockwise", "Continue last session") { store.selectedSessionId = last.id }
+                    }
+                    if store.draftAgent == .claude && !store.draftFolder.isEmpty {
+                        quick("terminal", "Resume a session from the Mac…") { showResume = true }
                     }
                     if store.draftAgent.isStructured || store.draftAgent == .codex || store.draftAgent == .amp {
                         quick("arrow.triangle.branch", "Review uncommitted changes") {
@@ -61,6 +65,7 @@ struct HomeView: View {
         .background(Theme.bg)
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showAgents) { AgentPickerSheet() }
+        .sheet(isPresented: $showResume) { ResumeClaudeSheet(folder: store.draftFolder) }
         .sheet(isPresented: $showFolders) {
             FolderPickerSheet { store.draftFolder = $0 }
         }

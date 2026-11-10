@@ -200,6 +200,13 @@ export class Server {
           return json(res, 200, this.store.activity(Number(url.searchParams.get("limit") ?? 200)));
         case "GET /folders":
           return json(res, 200, { base: this.cfg.baseFolder, ...listFolders(this.cfg.baseFolder, url.searchParams.get("path") ?? "", this.sm.sessionCountByFolder()) });
+        case "GET /claude-sessions":
+          // Claude sessions started outside agent-hub, for a project folder.
+          return json(res, 200, this.sm.claudeHistory(url.searchParams.get("project") ?? ""));
+        case "POST /claude-sessions": {
+          const s = this.sm.resumeClaude(body, origin);
+          return json(res, 201, s);
+        }
         case "POST /folders": {
           const abs = createFolder(this.cfg.baseFolder, String(body.path ?? ""));
           this.store.logActivity(origin, "folder.create", undefined, abs);
