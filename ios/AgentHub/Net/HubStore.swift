@@ -60,7 +60,7 @@ final class HubStore {
     @ObservationIgnored private var backoff: Double = 1
     @ObservationIgnored private var reconnectWork: Task<Void, Never>?
     @ObservationIgnored private var generation = 0
-    @ObservationIgnored private var subscriptions: [String: (cols: Int, rows: Int)] = [:]
+    @ObservationIgnored private var subscriptions: [String: (cols: Int, rows: Int, terminal: Bool)] = [:]
     @ObservationIgnored var terminalSinks: [String: (Data) -> Void] = [:]
 
     var api: APIClient? { pairing.map(APIClient.init) }
@@ -208,7 +208,7 @@ final class HubStore {
             mac = h.mac
             approvals = Dictionary(uniqueKeysWithValues: h.approvals.map { ($0.requestId, $0) })
             // Resubscribe and catch up on anything missed while away.
-            for (id, size) in subscriptions { subscribe(id, cols: size.cols, rows: size.rows) }
+            for (id, sub) in subscriptions { subscribe(id, cols: sub.cols, rows: sub.rows, terminal: sub.terminal) }
             for id in transcripts.keys { Task { await loadTranscript(id) } }
             #if DEBUG
             if let a = ProcessInfo.processInfo.environment["AGENTHUB_AUTOSTART"], let kind = AgentKind(rawValue: a), selectedSessionId == nil {
@@ -284,14 +284,18 @@ final class HubStore {
         } catch { lastError = error.localizedDescription }
     }
 
-    func subscribe(_ id: String, cols: Int = 0, rows: Int = 0) {
-        subscriptions[id] = (cols, rows)
+    /// `terminal: false` follows only the transcript of a terminal session (no screen stream, no resize).
+    func subscribe(_ id: String, cols: Int = 0, rows: Int = 0, terminal: Bool = true) {
+        subscriptions[id] = (cols, rows, terminal)
         var m: [String: Any] = ["type": "subscribe", "sessionId": id]
         if cols > 0 { m["cols"] = cols; m["rows"] = rows }
+        if !terminal { m["terminal"] = false }
         send(m)
     }
 
-    func unsubscribe(_ id: String) {
+    /// `onlyIfTerminal`: skip unless the current subscription is of that kind (terminal vs. chat-only).
+    func unsubscribe(_ id: String, onlyIfTerminal: Bool? = nil) {
+        if let want = onlyIfTerminal, subscriptions[id]?.terminal != want { return }
         subscriptions[id] = nil
         send(["type": "unsubscribe", "sessionId": id])
     }
@@ -305,7 +309,7 @@ final class HubStore {
     }
 
     func terminalResize(_ id: String, cols: Int, rows: Int) {
-        subscriptions[id] = (cols, rows)
+        subscriptions[id] = (cols, rows, true)
         send(["type": "terminal.resize", "sessionId": id, "cols": cols, "rows": rows])
     }
 
@@ -313,6 +317,11 @@ final class HubStore {
         approvals[requestId] = nil
         send(["type": "approval.respond", "requestId": requestId, "decision": decision])
     }
+
+    func unqueue(_ id: String, queuedId: String) { send(["type": "prompt.unqueue", "sessionId": id, "queuedId": queuedId]) }
+
+    /// Pick an option of the menu a terminal Claude session is showing.
+    func answerPrompt(_ id: String, key: String) { send(["type": "prompt.answer", "sessionId": id, "key": key]) }
 
     func interrupt(_ id: String) { send(["type": "session.interrupt", "sessionId": id]) }
 

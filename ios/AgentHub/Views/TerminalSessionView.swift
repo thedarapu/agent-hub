@@ -5,6 +5,8 @@ import UIKit
 /// Codex / Amp / Shell / SSH: live terminal in the same chat frame.
 struct TerminalSessionView: View {
     let sessionId: String
+    /// Set for Claude running in a terminal: switch back to the chat transcript.
+    var onShowChat: (() -> Void)? = nil
     @Environment(HubStore.self) private var store
     @State private var text = ""
     @State private var showMenu = false
@@ -14,7 +16,8 @@ struct TerminalSessionView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            SessionHeader(session: session, onMenu: { showMenu = true }, onOutputs: { showOutputs = true })
+            SessionHeader(session: session, onMenu: { showMenu = true }, onOutputs: { showOutputs = true },
+                          switchView: onShowChat.map { ("bubble.left.and.text.bubble.right", "Show chat", $0) })
             TerminalPane(sessionId: sessionId)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 6)
@@ -88,6 +91,20 @@ enum TerminalMetrics {
     static let verticalChrome: CGFloat = 250
 }
 
+/// Claude started with `hub claude`: chat transcript by default, live terminal on demand.
+struct ClaudeTerminalSessionView: View {
+    let sessionId: String
+    @AppStorage("claudeTerminalShowsScreen") private var showScreen = false
+
+    var body: some View {
+        if showScreen {
+            TerminalSessionView(sessionId: sessionId) { showScreen = false }
+        } else {
+            SessionView(sessionId: sessionId) { showScreen = true }
+        }
+    }
+}
+
 struct TerminalPane: UIViewRepresentable {
     let sessionId: String
     @Environment(HubStore.self) private var store
@@ -115,7 +132,8 @@ struct TerminalPane: UIViewRepresentable {
 
     static func dismantleUIView(_ uiView: TerminalView, coordinator: Coordinator) {
         coordinator.store.terminalSinks[coordinator.sessionId] = nil
-        coordinator.store.unsubscribe(coordinator.sessionId)
+        // The chat view may have taken over the subscription already.
+        coordinator.store.unsubscribe(coordinator.sessionId, onlyIfTerminal: true)
     }
 
     @MainActor

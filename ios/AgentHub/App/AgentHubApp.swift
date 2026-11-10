@@ -86,7 +86,8 @@ struct RootView: View {
     @ViewBuilder private var mainContent: some View {
         if let s = store.session(store.selectedSessionId) {
             Group {
-                if s.isTerminal { TerminalSessionView(sessionId: s.id) }
+                if s.isClaudeTerminal { ClaudeTerminalSessionView(sessionId: s.id) }
+                else if s.isTerminal { TerminalSessionView(sessionId: s.id) }
                 else { SessionView(sessionId: s.id) }
             }
             .id(s.id)

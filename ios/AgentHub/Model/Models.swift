@@ -46,6 +46,12 @@ struct Session: Codable, Identifiable, Hashable {
     var resumedFrom: String?
     var status: SessionStatus
     var statusDetail: String?
+    /// Claude in a terminal: the selection menu it is showing (status waiting).
+    var prompt: TerminalPrompt?
+    /// Claude in a terminal: messages waiting for Claude to finish its turn.
+    var queued: [QueuedPrompt]?
+    /// Claude in a terminal: messages in Claude's own queue (typed while it works).
+    var claudeQueue: [String]?
     var pinned: Bool
     var createdAt: String
     var updatedAt: String
@@ -53,6 +59,8 @@ struct Session: Codable, Identifiable, Hashable {
 
     var project: String { (folder as NSString).lastPathComponent }
     var isTerminal: Bool { mode == "terminal" }
+    /// Claude running as its terminal UI (`hub claude`); the daemon also keeps a chat transcript.
+    var isClaudeTerminal: Bool { isTerminal && agent == .claude }
     var flagsString: String { flags.map(shellQuote).joined(separator: " ") }
 
     /// "binge · Claude · running" / "binge · wants to run tests"
@@ -63,6 +71,18 @@ struct Session: Codable, Identifiable, Hashable {
         if agent == .ssh { return "SSH · \(status.rawValue)" }
         return "\(project) · \(agent.shortLabel) · \(status.rawValue)"
     }
+}
+
+struct QueuedPrompt: Codable, Hashable, Identifiable {
+    var id: String
+    var text: String
+}
+
+struct TerminalPrompt: Codable, Hashable {
+    struct Option: Codable, Hashable { var key: String; var label: String }
+    var question: String
+    var context: String
+    var options: [Option]
 }
 
 func shellQuote(_ s: String) -> String {

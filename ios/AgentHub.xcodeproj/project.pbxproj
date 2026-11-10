@@ -15,12 +15,14 @@
 		155649F9D30B45F5EA78B688 /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4354C959FC5D890FC156FC68 /* Keychain.swift */; };
 		2DDA24003D1CE8FA25E77BED /* PairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 036A440E56F0BB4789EEDEB9 /* PairingView.swift */; };
 		30129D3A54BA1E40B76CC280 /* OutputViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC5DA05E2228B46651D361A0 /* OutputViewer.swift */; };
+		479E5F8FC09C571F48802D63 /* CanvasViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE149602F6AF072539745D92 /* CanvasViews.swift */; };
 		4DCC67EFAE8738FD75439A69 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = FB7E0EB4B34F3F50DFC28A53 /* SwiftTerm */; };
 		5F75D0CDAC40EA1483D5E45A /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC8584CC6625236B87F7DA8B /* Theme.swift */; };
 		6AC8429774B177158194B5AB /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2530C4DAF2D282697076B5B0 /* Assets.xcassets */; };
 		6B6BD7B3E383B26BCA3316A9 /* DrawerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D36D1BFC167E690D8A1BE3E /* DrawerView.swift */; };
 		853C9DC2C487011D4B829D62 /* TerminalSessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F39FD2164347B4CBF125183 /* TerminalSessionView.swift */; };
 		89F4742033A9B26A1529F1CB /* ResumeClaudeSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 436176AE4C46C39730918C1C /* ResumeClaudeSheet.swift */; };
+		980C4D6DA6AB751672B7D03B /* Attachments.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD64A4292EA9BD408E7E76F8 /* Attachments.swift */; };
 		A1A21C0FC2974D14E8C5FD15 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F18820B3B5CA4002C315E24 /* APIClient.swift */; };
 		AF21CBE7FCF8C41E103DA57F /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48778CA701837FA8E762DB5C /* Models.swift */; };
 		BFDC1CCFEC4A20CA3804FDEF /* MacSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9ED5EE3D52747B77DDA3724 /* MacSheet.swift */; };
@@ -50,6 +52,8 @@
 		A7E7BD34066D2718C6A93C0D /* SessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionView.swift; sourceTree = "<group>"; };
 		AC84E19AEF8E25CAC78777D0 /* AgentPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentPickerSheet.swift; sourceTree = "<group>"; };
 		AC8584CC6625236B87F7DA8B /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		CD64A4292EA9BD408E7E76F8 /* Attachments.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Attachments.swift; sourceTree = "<group>"; };
+		CE149602F6AF072539745D92 /* CanvasViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasViews.swift; sourceTree = "<group>"; };
 		D9ED5EE3D52747B77DDA3724 /* MacSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacSheet.swift; sourceTree = "<group>"; };
 		DC5DA05E2228B46651D361A0 /* OutputViewer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutputViewer.swift; sourceTree = "<group>"; };
 		E54F61C6273152BC85001D52 /* FolderPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderPickerSheet.swift; sourceTree = "<group>"; };
@@ -83,6 +87,8 @@
 			isa = PBXGroup;
 			children = (
 				AC84E19AEF8E25CAC78777D0 /* AgentPickerSheet.swift */,
+				CD64A4292EA9BD408E7E76F8 /* Attachments.swift */,
+				CE149602F6AF072539745D92 /* CanvasViews.swift */,
 				8F8AD07ACF578322A772500F /* Composer.swift */,
 				8D36D1BFC167E690D8A1BE3E /* DrawerView.swift */,
 				E54F61C6273152BC85001D52 /* FolderPickerSheet.swift */,
@@ -233,6 +239,8 @@
 				A1A21C0FC2974D14E8C5FD15 /* APIClient.swift in Sources */,
 				C0BDA197E9AD4ABFB0DD2339 /* AgentHubApp.swift in Sources */,
 				0A416C8543540BA496D8F321 /* AgentPickerSheet.swift in Sources */,
+				980C4D6DA6AB751672B7D03B /* Attachments.swift in Sources */,
+				479E5F8FC09C571F48802D63 /* CanvasViews.swift in Sources */,
 				EB25DD29BB31EA45A2710207 /* Composer.swift in Sources */,
 				6B6BD7B3E383B26BCA3316A9 /* DrawerView.swift in Sources */,
 				FE4D87763E8ACB2E374FCBDC /* FolderPickerSheet.swift in Sources */,

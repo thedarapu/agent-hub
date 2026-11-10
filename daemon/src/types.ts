@@ -27,10 +27,29 @@ export interface Session {
   forkOnResume?: boolean;
   status: SessionStatus;
   statusDetail?: string;
+  /** Claude in a terminal: the session file whose records feed the transcript. */
+  chatSource?: {
+    claudeSessionId: string;
+    offset: number;
+    /** Last /rename title applied. Claude re-writes it often, so only a change renames the session. */
+    customTitle?: string;
+  };
+  /** Claude in a terminal: messages sent while it was busy, typed in one by one when it goes idle. */
+  queued?: { id: string; text: string }[];
+  /** Claude in a terminal: messages waiting in Claude's own queue (typed while it works). */
+  claudeQueue?: string[];
+  /** Claude in a terminal: the selection menu it is showing (status "waiting"). */
+  prompt?: TerminalPrompt;
   pinned: boolean;
   createdAt: string;
   updatedAt: string;
   lastActivityAt: string;
+}
+
+export interface TerminalPrompt {
+  question: string;
+  context: string;
+  options: { key: string; label: string }[];
 }
 
 /** Normalized transcript event for structured sessions. */

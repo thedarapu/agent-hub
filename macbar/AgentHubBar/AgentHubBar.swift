@@ -120,6 +120,11 @@ final class BarModel {
     }
 
     var needsYou: Int { sessions.filter { $0.status == "waiting" }.count }
+    var glyphState: HubGlyph.State {
+        if needsYou > 0 { return .needsYou }
+        if sessions.contains(where: { $0.status == "running" || $0.status == "starting" }) { return .running }
+        return .idle
+    }
 }
 
 @main
@@ -130,7 +135,11 @@ struct AgentHubBarApp: App {
         MenuBarExtra {
             BarMenu().environment(model)
         } label: {
-            Image(systemName: model.needsYou > 0 ? "exclamationmark.bubble.fill" : (model.running ? "bubble.left.and.text.bubble.right" : "bubble.left.and.exclamationmark.bubble.right"))
+            HStack(spacing: 3) {
+                Image(nsImage: HubGlyph.image(model.glyphState))
+                if model.needsYou > 0 { Text("\(model.needsYou)") }
+            }
+            .accessibilityLabel(model.needsYou > 0 ? "agent-hub, \(model.needsYou) waiting for you" : "agent-hub")
         }
         .menuBarExtraStyle(.window)
 
@@ -285,5 +294,49 @@ struct ActivityWindow: View {
         }
         .frame(minWidth: 700, minHeight: 400)
         .task { await model.loadActivity() }
+    }
+}
+
+/// The menu bar glyph: the app icon's hub (a center and three agents on a
+/// ring), drawn as a template image so macOS colors it for the menu bar.
+/// Idle: hollow agents. Running: filled agents with spokes. Needs you: the
+/// top agent grows. Geometry matches design/make-icons.swift at 18 pt.
+enum HubGlyph {
+    enum State { case idle, running, needsYou }
+
+    private static var cache: [State: NSImage] = [:]
+
+    static func image(_ state: State) -> NSImage {
+        if let i = cache[state] { return i }
+        let img = NSImage(size: NSSize(width: 18, height: 18), flipped: true) { _ in
+            NSColor.black.set()
+            let center = CGPoint(x: 9, y: 10)
+            let sats = [CGPoint(x: 9, y: 3.6), CGPoint(x: 14.5, y: 13.2), CGPoint(x: 3.5, y: 13.2)]
+            func circle(_ c: CGPoint, _ r: CGFloat) -> NSBezierPath {
+                NSBezierPath(ovalIn: NSRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2))
+            }
+            circle(center, 2.3).fill()
+            if state == .idle {
+                for s in sats {
+                    let p = circle(s, 1.7)
+                    p.lineWidth = 1.2
+                    p.stroke()
+                }
+            } else {
+                let spokes = NSBezierPath()
+                for s in sats { spokes.move(to: center); spokes.line(to: s) }
+                spokes.lineWidth = 1
+                NSColor.black.withAlphaComponent(0.5).setStroke()
+                spokes.stroke()
+                NSColor.black.set()
+                circle(state == .needsYou ? CGPoint(x: 9, y: 3.4) : sats[0], state == .needsYou ? 2.9 : 1.9).fill()
+                circle(sats[1], 1.9).fill()
+                circle(sats[2], 1.9).fill()
+            }
+            return true
+        }
+        img.isTemplate = true
+        cache[state] = img
+        return img
     }
 }

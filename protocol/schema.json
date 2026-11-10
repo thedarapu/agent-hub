@@ -67,6 +67,46 @@
           "type": "boolean",
           "description": "Next start forks agentSessionId because a terminal still has it open."
         },
+        "chatSource": {
+          "type": "object",
+          "description": "Claude in a terminal: the session file whose records feed the transcript.",
+          "properties": {
+            "claudeSessionId": { "type": "string" },
+            "offset": { "type": "integer" }
+          },
+          "required": ["claudeSessionId", "offset"]
+        },
+        "claudeQueue": {
+          "type": "array",
+          "description": "Claude in a terminal: messages waiting in Claude's own input queue (typed while it works).",
+          "items": { "type": "string" }
+        },
+        "queued": {
+          "type": "array",
+          "description": "Claude in a terminal: messages sent while it was busy; typed in one by one when it goes idle. Cancel with prompt.unqueue.",
+          "items": {
+            "type": "object",
+            "properties": { "id": { "type": "string" }, "text": { "type": "string" } },
+            "required": ["id", "text"]
+          }
+        },
+        "prompt": {
+          "type": "object",
+          "description": "Claude in a terminal: the selection menu it is showing (status waiting). Answer with prompt.answer.",
+          "properties": {
+            "question": { "type": "string" },
+            "context": { "type": "string" },
+            "options": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": { "key": { "type": "string" }, "label": { "type": "string" } },
+                "required": ["key", "label"]
+              }
+            }
+          },
+          "required": ["question", "context", "options"]
+        },
         "status": {
           "$ref": "#/$defs/SessionStatus"
         },
@@ -640,6 +680,10 @@
         "rows": {
           "type": "integer"
         },
+        "terminal": {
+          "type": "boolean",
+          "description": "false: transcript events only, no terminal.data (chat view of a terminal Claude session). Default true."
+        },
         "type": {
           "const": "subscribe"
         }
@@ -751,6 +795,37 @@
         "decision"
       ]
     },
+    "phone:prompt.unqueue": {
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string" },
+        "queuedId": { "type": "string" },
+        "ref": {},
+        "type": { "const": "prompt.unqueue" }
+      },
+      "required": ["type", "sessionId", "queuedId"]
+    },
+    "phone:prompt.answer": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string",
+          "description": "An option key from the session's prompt."
+        },
+        "ref": {},
+        "type": {
+          "const": "prompt.answer"
+        }
+      },
+      "required": [
+        "type",
+        "sessionId",
+        "key"
+      ]
+    },
     "phone:session.interrupt": {
       "type": "object",
       "properties": {
@@ -839,6 +914,12 @@
     },
     {
       "$ref": "#/$defs/phone:approval.respond"
+    },
+    {
+      "$ref": "#/$defs/phone:prompt.answer"
+    },
+    {
+      "$ref": "#/$defs/phone:prompt.unqueue"
     },
     {
       "$ref": "#/$defs/phone:session.interrupt"

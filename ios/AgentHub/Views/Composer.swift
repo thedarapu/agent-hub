@@ -29,6 +29,15 @@ struct Composer<Accessory: View>: View {
             HStack(spacing: 8) {
                 accessory
                 Spacer(minLength: 0)
+                if focused {
+                    Button { focused = false } label: {
+                        Image(systemName: "keyboard.chevron.compact.down")
+                            .font(.system(size: 16, weight: .medium))
+                            .frame(width: 36, height: 36)
+                            .foregroundStyle(Theme.secondary)
+                    }
+                    .accessibilityLabel("Hide keyboard")
+                }
                 Button {
                     dictation.toggle { text = $0 }
                 } label: {

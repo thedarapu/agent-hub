@@ -29,7 +29,7 @@ targets:
         CFBundleDisplayName: agent-hub
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
-        NSCameraUsageDescription: Scan the pairing QR code shown by agent-hub on your Mac.
+        NSCameraUsageDescription: Scan the pairing QR code shown by agent-hub on your Mac, and take photos to send to your agents.
         NSLocalNetworkUsageDescription: Connects to agent-hub on your Mac over Tailscale.
         NSMicrophoneUsageDescription: Dictate messages to your agents.
         NSSpeechRecognitionUsageDescription: Dictate messages to your agents.

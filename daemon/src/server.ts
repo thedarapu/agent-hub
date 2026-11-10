@@ -265,6 +265,8 @@ export class Server {
     } else if (method === "POST" && action === "prompt") {
       this.sm.prompt(id, String(body.text ?? ""), origin);
       return json(res, 202, { ok: true });
+    } else if (method === "POST" && action === "uploads") {
+      return json(res, 201, this.sm.upload(id, body, origin));
     } else if (method === "POST" && action === "interrupt") {
       this.sm.interrupt(id, origin);
       return json(res, 202, { ok: true });
@@ -370,7 +372,9 @@ export class Server {
       case "subscribe": {
         const s = this.sm.get(sid);
         c.subs.add(sid);
-        if (s.mode === "terminal") this.sm.subscribeTerminal(sid, c.id, m.cols, m.rows);
+        // terminal: false — chat view of a terminal Claude session; no screen stream.
+        if (s.mode === "terminal" && m.terminal !== false) this.sm.subscribeTerminal(sid, c.id, m.cols, m.rows);
+        else if (s.mode === "terminal") this.sm.unsubscribeTerminal(sid, c.id);
         return send(c.ws, { type: "subscribed", ref: m.ref, sessionId: sid });
       }
       case "unsubscribe":
@@ -378,6 +382,12 @@ export class Server {
         return this.sm.unsubscribeTerminal(sid, c.id);
       case "prompt.send":
         this.sm.prompt(sid, String(m.text ?? ""), c.origin);
+        return send(c.ws, { type: "ack", ref: m.ref });
+      case "prompt.unqueue":
+        this.sm.unqueue(sid, String(m.queuedId ?? ""), c.origin);
+        return send(c.ws, { type: "ack", ref: m.ref });
+      case "prompt.answer":
+        this.sm.answerPrompt(sid, String(m.key ?? ""), c.origin);
         return send(c.ws, { type: "ack", ref: m.ref });
       case "terminal.input":
         return this.sm.terminalInput(sid, Buffer.from(String(m.data ?? ""), "base64"));
@@ -436,7 +446,8 @@ async function readJson(req: http.IncomingMessage): Promise<any> {
   let size = 0;
   for await (const ch of req) {
     size += (ch as Buffer).length;
-    if (size > 2 * 1024 * 1024) throw new HttpError(413, "body too large");
+    // Photos from the phone arrive base64-encoded in JSON.
+    if (size > 24 * 1024 * 1024) throw new HttpError(413, "body too large");
     chunks.push(ch as Buffer);
   }
   if (!chunks.length) return {};

@@ -15,10 +15,21 @@ import { bus } from "./bus.ts";
 import * as tmux from "./tmux.ts";
 import { TerminalBridge } from "./adapters/terminal.ts";
 import { ClaudeProcess, type ApprovalRequest, type NewEvent } from "./adapters/claude.ts";
-import { OutputsTracker } from "./outputs.ts";
+import { ensureHubDir, OutputsTracker } from "./outputs.ts";
 import { safeResolve } from "./paths.ts";
 import { shellJoin, shellSplit } from "./shell.ts";
-import { listClaudeSessions, liveClaudeSessions, readHistory, sessionFile, type ClaudeHistorySession } from "./claude-history.ts";
+import {
+  claudeRegistry,
+  JsonlTail,
+  listClaudeSessions,
+  liveClaudeSessions,
+  parseTerminalPrompt,
+  readHistory,
+  sessionFile,
+  type ClaudeHistorySession,
+  type ClaudeRegistryEntry,
+  type HistoryEvent,
+} from "./claude-history.ts";
 
 const AGENTS: AgentKind[] = ["claude", "codex", "amp", "shell", "ssh"];
 const LIVE: SessionStatus[] = ["starting", "running", "waiting", "idle"];
@@ -78,6 +89,14 @@ export class SessionManager {
   private seqs = new Map<string, number>();
   private shotTimers = new Map<string, NodeJS.Timeout>();
   private pollTimer?: NodeJS.Timeout;
+  private tailTimer?: NodeJS.Timeout;
+  /** Claude-in-terminal sessions: readers of their session files. */
+  private tails = new Map<string, JsonlTail>();
+  /** Terminal Claude sessions whose status comes from Claude's registry rather than screen activity. */
+  private claudeStatusSeen = new Set<string>();
+  private tailing = false;
+  /** When the phone last answered a menu or typed a queued message; Claude's registry lags by a moment. */
+  private answeredAt = new Map<string, number>();
   private lastCapture = new Map<string, number>();
   /** Last terminal size a phone reported; new sessions start at it so TUIs draw at the right width. */
   private lastTermSize = { cols: 80, rows: 24 };
@@ -115,10 +134,16 @@ export class SessionManager {
       }
     }
     this.pollTimer = setInterval(() => void this.pollTerminals(), 2000);
+    this.tailTimer = setInterval(() => {
+      if (this.tailing) return;
+      this.tailing = true;
+      void this.tailClaudeTerminals().finally(() => (this.tailing = false));
+    }, 700);
   }
 
   shutdown(): void {
     if (this.pollTimer) clearInterval(this.pollTimer);
+    if (this.tailTimer) clearInterval(this.tailTimer);
     for (const b of this.bridges.values()) b.detach();
     for (const c of this.claudes.values()) c.kill();
   }
@@ -512,14 +537,20 @@ export class SessionManager {
     this.store.logActivity(origin, "prompt.send", id, text.slice(0, 200));
     if (s.mode === "structured") {
       const isFirst = !this.store.transcript(id).some((e) => e.kind === "user");
-      if (isFirst && s.name.endsWith(` in ${path.basename(s.folder)}`)) this.rename(s, autoName(text));
+      if (isFirst && this.hasDefaultName(s) && !text.trim().startsWith("/")) this.rename(s, autoName(text));
       this.addEvent(id, { kind: "user", text });
       const c = this.ensureClaude(s);
       if (!c.alive && s.agentSessionId) c.setResumeId(s.agentSessionId);
       c.sendPrompt(text);
     } else {
       if (!LIVE.includes(s.status)) throw new HttpError(409, "session has ended");
-      if (s.name === `${AGENT_LABEL[s.agent]} in ${path.basename(s.folder)}`) this.rename(s, autoName(text));
+      // Claude busy or showing a menu: typing now would land in the menu, so hold it.
+      if (s.agent === "claude" && (s.status === "running" || s.status === "waiting" || s.queued?.length)) {
+        s.queued = [...(s.queued ?? []), { id: "q-" + crypto.randomBytes(3).toString("hex"), text }];
+        this.save(s);
+        return;
+      }
+      if (this.hasDefaultName(s) && !text.trim().startsWith("/")) this.rename(s, autoName(text));
       void this.pasteAndEnter(id, text);
       this.touch(s);
     }
@@ -529,7 +560,62 @@ export class SessionManager {
     const s = this.get(id);
     this.store.logActivity(origin, "session.interrupt", id);
     if (s.mode === "structured") this.claudes.get(id)?.interrupt();
+    // Claude's TUI: Esc stops the turn; a second Ctrl-C would quit it.
+    else if (s.agent === "claude") void tmux.sendKeys(id, "Escape");
     else void tmux.sendKeys(id, "C-c");
+  }
+
+  /**
+   * A photo or file from the phone, saved in the project so the agent can
+   * read it. Returns the absolute path to mention in the prompt.
+   */
+  upload(id: string, p: { name?: string; data?: string }, origin: string): { path: string; relpath: string } {
+    const s = this.get(id);
+    const buf = Buffer.from(String(p.data ?? ""), "base64");
+    if (!buf.length) throw new HttpError(400, "empty upload");
+    const ext = (path.extname(String(p.name ?? "")).toLowerCase().match(/^\.[a-z0-9]{1,8}$/) ?? [".jpg"])[0];
+    const dir = path.join(ensureHubDir(s.folder), "uploads");
+    fs.mkdirSync(dir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..*/, "");
+    const file = path.join(dir, `${stamp}-${crypto.randomBytes(3).toString("hex")}${ext}`);
+    fs.writeFileSync(file, buf);
+    this.store.logActivity(origin, "upload", id, `${path.basename(file)} (${buf.length} bytes)`);
+    return { path: file, relpath: path.relative(s.folder, file) };
+  }
+
+  /** Drop a queued message before it is sent. */
+  unqueue(id: string, queuedId: string, origin: string): void {
+    const s = this.get(id);
+    const q = s.queued?.find((x) => x.id === queuedId);
+    if (!q) throw new HttpError(409, "that message was already sent");
+    s.queued = s.queued!.filter((x) => x !== q);
+    if (!s.queued.length) s.queued = undefined;
+    this.store.logActivity(origin, "prompt.unqueue", id, q.text.slice(0, 200));
+    this.save(s);
+  }
+
+  /** Type the next queued message once Claude is idle. */
+  private deliverQueued(s: Session): void {
+    if (s.status !== "idle" || !s.queued?.length) return;
+    // Claude's registry takes a moment to report busy after a send.
+    if (Date.now() - (this.answeredAt.get(s.id) ?? 0) < 3000) return;
+    const [next, ...rest] = s.queued;
+    s.queued = rest.length ? rest : undefined;
+    this.answeredAt.set(s.id, Date.now());
+    void this.pasteAndEnter(s.id, next.text);
+    this.setStatus(s, "running");
+    this.save(s);
+  }
+
+  /** Pick an option of the menu Claude's terminal UI is showing. */
+  answerPrompt(id: string, key: string, origin: string): void {
+    const s = this.get(id);
+    const opt = s.prompt?.options.find((o) => o.key === key);
+    if (!opt || s.status !== "waiting") throw new HttpError(409, "that prompt is no longer showing");
+    this.store.logActivity(origin, "prompt.answer", id, `${s.prompt!.question} → ${opt.label}`.slice(0, 200));
+    void tmux.sendLiteral(id, key);
+    this.answeredAt.set(id, Date.now());
+    this.setStatus(s, "running");
   }
 
   subscribeTerminal(id: string, clientId: string, cols?: number, rows?: number): void {
@@ -645,7 +731,116 @@ export class SessionManager {
   }
 
   private onOutputAdded(o: Output, s: Session): void {
-    if (s.mode === "structured") this.addEvent(s.id, { kind: "output", outputId: o.id, output: o });
+    if (this.hasTranscript(s)) this.addEvent(s.id, { kind: "output", outputId: o.id, output: o });
+  }
+
+  /** Still "Claude Code in <project>", not named by a prompt or the user. */
+  private hasDefaultName(s: Session): boolean {
+    return s.name === `${AGENT_LABEL[s.agent]} in ${path.basename(s.folder)}`;
+  }
+
+  private hasTranscript(s: Session): boolean {
+    return s.mode === "structured" || s.agent === "claude";
+  }
+
+  /**
+   * Claude running as its terminal UI (`hub claude`): follow its session file
+   * so the phone can show the conversation as a chat. The CLI registers its
+   * tmux pane in ~/.claude/sessions, which maps our tmux session to Claude's
+   * session id; that id changes on /clear and /resume.
+   */
+  private async tailClaudeTerminals(): Promise<void> {
+    let reg: ClaudeRegistryEntry[] | undefined;
+    for (const s of this.sessions.values()) {
+      if (s.agent !== "claude" || s.mode !== "terminal") continue;
+      const live = LIVE.includes(s.status);
+      if (!live && !this.tails.has(s.id)) continue;
+      try {
+        if (live) {
+          reg ??= claudeRegistry();
+          const r = reg.find((e) => e.tmux?.split(":")[0] === s.id);
+          if (r && r.sessionId !== s.chatSource?.claudeSessionId) {
+            const switched = !!s.chatSource;
+            if (switched) this.drainTail(s);
+            this.tails.delete(s.id);
+            s.claudeQueue = undefined;
+            s.chatSource = { claudeSessionId: r.sessionId, offset: 0 };
+            s.agentSessionId = r.sessionId;
+            this.save(s);
+            if (switched) this.addEvent(s.id, { kind: "system", text: "New conversation in the terminal." });
+          }
+          this.drainTail(s);
+          if (r?.status) {
+            this.claudeStatusSeen.add(s.id);
+            await this.applyClaudeStatus(s, r.status);
+          } else {
+            this.claudeStatusSeen.delete(s.id);
+          }
+          this.deliverQueued(s);
+        } else {
+          this.drainTail(s);
+          this.tails.delete(s.id);
+          this.claudeStatusSeen.delete(s.id);
+        }
+      } catch (e) {
+        console.error(`${s.id}: reading Claude session file`, e);
+      }
+    }
+  }
+
+  /** busy / idle / waiting from ~/.claude/sessions; while waiting, read the menu off the screen. */
+  private async applyClaudeStatus(s: Session, status: string): Promise<void> {
+    const recent = Date.now() - (this.answeredAt.get(s.id) ?? 0) < 1500;
+    if (status === "busy") return this.setStatus(s, "running");
+    if (status !== "waiting") return recent ? undefined : this.setStatus(s, "idle");
+    if (recent) return;
+    const screen = await tmux.capturePane(s.id).catch(() => "");
+    if (!LIVE.includes(s.status)) return;
+    const p = parseTerminalPrompt(screen);
+    const changed = JSON.stringify(p) !== JSON.stringify(s.prompt);
+    if (s.status === "waiting" && !changed) return;
+    s.prompt = p;
+    s.status = "waiting";
+    s.statusDetail = p ? p.question.slice(0, 120) : "Waiting for you in the terminal";
+    s.lastActivityAt = new Date().toISOString();
+    this.save(s);
+  }
+
+  private drainTail(s: Session): void {
+    if (!s.chatSource) return;
+    let t = this.tails.get(s.id);
+    if (!t) {
+      const file = sessionFile(s.folder, s.chatSource.claudeSessionId);
+      if (!file) return; // Claude hasn't written it yet
+      t = new JsonlTail(file, s.folder, s.chatSource.offset);
+      this.tails.set(s.id, t);
+    }
+    const { events, customTitle, aiTitle, queue } = t.read();
+    for (const e of events) this.addHistoryEvent(s.id, e);
+    if (queue && JSON.stringify(queue) !== JSON.stringify(s.claudeQueue ?? [])) {
+      s.claudeQueue = queue.length ? queue : undefined;
+      this.save(s);
+    }
+    if (customTitle && customTitle !== s.chatSource.customTitle) {
+      // /rename in the terminal
+      s.chatSource.customTitle = customTitle;
+      this.rename(s, customTitle.slice(0, 120));
+    } else if (aiTitle && this.hasDefaultName(s)) {
+      this.rename(s, autoName(aiTitle));
+    }
+    if (t.offset !== s.chatSource.offset) {
+      s.chatSource.offset = t.offset;
+      this.store.putSession(s);
+    }
+  }
+
+  /** Like addEvent, but keeps the record's own timestamp. */
+  private addHistoryEvent(sessionId: string, e: HistoryEvent): void {
+    const ev = { ...e, seq: this.nextSeq(sessionId) } as TranscriptEvent;
+    this.store.putEvent(sessionId, ev);
+    bus.publish({ type: "transcript.event", sessionId, event: ev }, true);
+    const s = this.sessions.get(sessionId);
+    if (s && ev.ts > s.lastActivityAt) s.lastActivityAt = ev.ts;
   }
 
   private touch(s: Session): void {
@@ -657,6 +852,7 @@ export class SessionManager {
     if (s.status === status && s.statusDetail === detail) return;
     s.status = status;
     s.statusDetail = detail;
+    if (status !== "waiting") s.prompt = undefined;
     s.lastActivityAt = new Date().toISOString();
     this.save(s);
   }
@@ -688,6 +884,8 @@ export class SessionManager {
       }
       const actIso = new Date(t.activity * 1000).toISOString();
       if (actIso > s.lastActivityAt) s.lastActivityAt = actIso;
+      // Claude reports its own state; see tailClaudeTerminals.
+      if (this.claudeStatusSeen.has(s.id)) continue;
       if (now - t.activity < this.cfg.terminalIdleSeconds) {
         if (s.status !== "running") this.setStatus(s, "running");
         continue;

@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 /// Transcript items after grouping raw events for display.
 enum TranscriptItem: Identifiable {
@@ -8,20 +9,50 @@ enum TranscriptItem: Identifiable {
     case output(TranscriptEvent)
     case approval(TranscriptEvent)
     case notice(TranscriptEvent)
+    case thinking(TranscriptEvent)
+    /// A claude.ai artifact Claude published (shown once, where it was last updated).
+    case canvas(url: String, title: String?)
 
     var id: String {
         switch self {
-        case .user(let e), .assistant(let e), .output(let e), .approval(let e), .notice(let e): "e\(e.seq)"
+        case .user(let e), .assistant(let e), .output(let e), .approval(let e), .notice(let e), .thinking(let e): "e\(e.seq)"
         case .tools(let es): "t\(es.first?.seq ?? 0)"
+        case .canvas(let url, _): "c\(url)"
         }
+    }
+
+    /// Artifact links in a group of tool events: the `url` of a publish/open,
+    /// or the link in a create's result. Reads and listings don't count.
+    static func canvases(in tools: [TranscriptEvent], titles: inout [String: String]) -> [String] {
+        var urls: [String] = []
+        for e in tools where e.kind == "tool_use" && e.tool == "Artifact" {
+            let action = e.input?["action"]?.stringValue ?? "publish"
+            guard ["publish", "open"].contains(action), e.input?["asset"] == nil else { continue }
+            var url = e.input?["url"]?.stringValue
+            if url == nil, let r = tools.first(where: { $0.kind == "tool_result" && $0.toolUseId == e.toolUseId }),
+               r.isError != true, let t = r.text {
+                url = ClaudeWeb.firstArtifactURL(in: t)
+            }
+            guard let u = url else { continue }
+            if let t = e.input?["title"]?.stringValue, !t.isEmpty { titles[u] = t }
+            if !urls.contains(u) { urls.append(u) }
+        }
+        return urls
     }
 
     static func group(_ events: [TranscriptEvent]) -> [TranscriptItem] {
         var out: [TranscriptItem] = []
         var tools: [TranscriptEvent] = []
+        var titles: [String: String] = [:]
         func flush() {
             defer { tools = [] }
             guard !tools.isEmpty else { return }
+            defer {
+                for u in canvases(in: tools, titles: &titles) {
+                    out.removeAll { if case .canvas(u, _) = $0 { return true }; return false }
+                    out.append(.canvas(url: u, title: titles[u]))
+                }
+            }
             // A result whose tool_use sat before an approval card: attach it to that earlier group.
             let onlyResults = !tools.contains { $0.kind == "tool_use" || $0.kind == "thinking" }
             if onlyResults {
@@ -33,7 +64,8 @@ enum TranscriptItem: Identifiable {
         }
         for e in events {
             switch e.kind {
-            case "tool_use", "tool_result", "thinking": tools.append(e)
+            case "tool_use", "tool_result": tools.append(e)
+            case "thinking": flush(); out.append(.thinking(e))
             case "user": flush(); out.append(.user(e))
             case "assistant": flush(); out.append(.assistant(e))
             case "output": flush(); out.append(.output(e))
@@ -76,23 +108,50 @@ func toolSummary(_ events: [TranscriptEvent]) -> String {
 
 struct SessionView: View {
     let sessionId: String
+    /// Set for Claude running in a terminal: switch to the live screen.
+    var onShowTerminal: (() -> Void)? = nil
     @Environment(HubStore.self) private var store
     @State private var text = ""
     @State private var showMenu = false
     @State private var showOutputs = false
     @State private var viewing: Output?
+    /// Bumped on send so the transcript jumps to the bottom.
+    @State private var sentTick = 0
+    @State private var attachments: [PendingImage] = []
+    @State private var pickingPhotos = false
+    @State private var takingPhoto = false
 
     private var session: Session? { store.session(sessionId) }
     private var events: [TranscriptEvent] { store.transcripts[sessionId] ?? [] }
 
     var body: some View {
         VStack(spacing: 0) {
-            SessionHeader(session: session, onMenu: { showMenu = true }, onOutputs: { showOutputs = true })
+            SessionHeader(session: session, onMenu: { showMenu = true }, onOutputs: { showOutputs = true },
+                          switchView: onShowTerminal.map { ("terminal", "Show terminal", $0) })
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 18) {
+                        if events.isEmpty, session?.isClaudeTerminal == true {
+                            Text("The conversation in the Mac terminal shows up here.")
+                                .font(.subheadline).foregroundStyle(Theme.secondary)
+                        }
                         ForEach(TranscriptItem.group(events)) { item in
                             row(item)
+                        }
+                        if let s = session, s.isClaudeTerminal, s.status == .waiting {
+                            if let p = s.prompt {
+                                TerminalPromptCard(prompt: p) { store.answerPrompt(sessionId, key: $0) }
+                            } else if let show = onShowTerminal {
+                                Button("Claude is waiting in the terminal", systemImage: "terminal", action: show)
+                                    .font(.subheadline.weight(.medium))
+                                    .foregroundStyle(Theme.needsText)
+                            }
+                        }
+                        ForEach(Array((session?.claudeQueue ?? []).enumerated()), id: \.offset) { _, q in
+                            QueuedBubble(text: q, note: "Queued in Claude", cancel: nil)
+                        }
+                        ForEach(session?.queued ?? []) { q in
+                            QueuedBubble(text: q.text) { store.unqueue(sessionId, queuedId: q.id) }
                         }
                         if let s = store.streaming[sessionId], !s.isEmpty {
                             AssistantText(text: s).opacity(0.85)
@@ -110,6 +169,20 @@ struct SessionView: View {
                 .scrollDismissesKeyboard(.interactively)
                 .defaultScrollAnchor(.bottom)
                 .onChange(of: events.count) { _, _ in withAnimation { proxy.scrollTo("bottom", anchor: .bottom) } }
+                #if DEBUG
+                .task(id: events.count) {
+                    // Simulator checks: AGENTHUB_SCROLL_TO=canvas jumps to the last canvas card.
+                    guard ProcessInfo.processInfo.environment["AGENTHUB_SCROLL_TO"] == "canvas" else { return }
+                    try? await Task.sleep(for: .milliseconds(600))
+                    if let c = TranscriptItem.group(events).last(where: { if case .canvas = $0 { return true }; return false }) {
+                        proxy.scrollTo(c.id, anchor: .center)
+                    }
+                }
+                #endif
+                .onChange(of: queuedCount) { _, _ in withAnimation { proxy.scrollTo("bottom", anchor: .bottom) } }
+                .onChange(of: sentTick) { _, _ in withAnimation { proxy.scrollTo("bottom", anchor: .bottom) } }
+                .onChange(of: session?.status) { _, _ in withAnimation { proxy.scrollTo("bottom", anchor: .bottom) } }
+                .onChange(of: session?.prompt) { _, p in if p != nil { withAnimation { proxy.scrollTo("bottom", anchor: .bottom) } } }
                 .onChange(of: store.streaming[sessionId]?.count ?? 0) { _, _ in proxy.scrollTo("bottom", anchor: .bottom) }
             }
             composer
@@ -118,23 +191,34 @@ struct SessionView: View {
         .toolbar(.hidden, for: .navigationBar)
         .task {
             await store.loadTranscript(sessionId)
-            store.subscribe(sessionId)
+            store.subscribe(sessionId, terminal: session?.isTerminal != true)
             #if DEBUG
             if ProcessInfo.processInfo.environment["AGENTHUB_OPEN_OUTPUTS"] != nil { showOutputs = true }
             #endif
         }
-        .onDisappear { store.unsubscribe(sessionId) }
+        // Switching to the terminal view may have subscribed already; keep that one.
+        .onDisappear { store.unsubscribe(sessionId, onlyIfTerminal: session?.isTerminal == true ? false : nil) }
         .sheet(isPresented: $showMenu) { SessionMenuSheet(sessionId: sessionId) }
         .navigationDestination(isPresented: $showOutputs) {
             if let s = session { OutputsView(session: s) }
         }
         .navigationDestination(item: $viewing) { o in OutputViewer(output: o) }
+        .modifier(AttachmentPickers(attachments: $attachments, pickingPhotos: $pickingPhotos, takingPhoto: $takingPhoto))
     }
+
+    private var queuedCount: Int { (session?.queued?.count ?? 0) + (session?.claudeQueue?.count ?? 0) }
 
     private var composer: some View {
         let agent = session?.agent ?? .claude
-        return Composer(placeholder: "Reply to \(agent.label)", text: $text) { t in
-            store.sendPrompt(sessionId, t)
+        let busy = session?.status == .running || session?.status == .waiting
+        return VStack(spacing: 0) {
+        if !attachments.isEmpty { AttachmentStrip(images: $attachments) }
+        Composer(placeholder: busy ? "Queue for after this turn…" : "Reply to \(agent.label)", text: $text, allowEmpty: !attachments.isEmpty) { t in
+            let imgs = attachments.map(\.image)
+            attachments = []
+            if imgs.isEmpty { store.sendPrompt(sessionId, t) }
+            else { Task { await store.sendPrompt(sessionId, t, images: imgs) } }
+            sentTick += 1
         } accessory: {
             if session?.status == .running || session?.status == .waiting {
                 Button { store.interrupt(sessionId) } label: {
@@ -145,6 +229,11 @@ struct SessionView: View {
                 .accessibilityLabel("Interrupt")
             }
             Menu {
+                Button("Photo Library", systemImage: "photo.on.rectangle") { pickingPhotos = true }
+                if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                    Button("Take Photo", systemImage: "camera") { takingPhoto = true }
+                }
+                Divider()
                 Button("Screenshot Simulator", systemImage: "iphone") { Task { await store.screenshot(sessionId) } }
                 Button("Screenshot Mac", systemImage: "laptopcomputer") { Task { await store.screenshot(sessionId, target: "mac") } }
                 Button("Outputs", systemImage: "square.grid.2x2") { showOutputs = true }
@@ -156,26 +245,38 @@ struct SessionView: View {
         }
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
+        }
     }
 
     @ViewBuilder private func row(_ item: TranscriptItem) -> some View {
         switch item {
         case .user(let e):
-            Text(e.text ?? "")
-                .font(.body)
-                .padding(.horizontal, 16).padding(.vertical, 12)
-                .background(Theme.sunken2, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                .frame(maxWidth: .infinity, alignment: .trailing)
-                .padding(.leading, 50)
-                .textSelection(.enabled)
+            let parts = PromptImages.split(e.text ?? "")
+            VStack(alignment: .trailing, spacing: 8) {
+                if !parts.paths.isEmpty { PromptImageRow(paths: parts.paths, session: session) }
+                if !parts.text.isEmpty {
+                    Text(parts.text)
+                        .font(.body)
+                        .padding(.horizontal, 16).padding(.vertical, 12)
+                        .background(Theme.sunken2, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        .textSelection(.enabled)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .padding(.leading, 50)
+        case .thinking(let e):
+            ThinkingText(text: e.text ?? "")
         case .assistant(let e):
             AssistantText(text: e.text ?? "")
         case .tools(let es):
             ToolGroup(events: es)
         case .output(let e):
             if let o = e.output {
-                OutputCard(output: o) { viewing = o }
+                if o.kind == "changes" { OutputCard(output: o) { viewing = o } }
+                else { OutputPreviewCard(output: o) { viewing = o } }
             }
+        case .canvas(let url, let title):
+            CanvasCard(url: url, title: title)
         case .approval(let e):
             ApprovalCard(event: e, agent: session?.agent ?? .claude) { decision in
                 if let id = e.requestId { store.respond(id, decision) }
@@ -193,13 +294,16 @@ struct SessionHeader: View {
     var session: Session?
     var onMenu: () -> Void
     var onOutputs: () -> Void
+    /// (symbol, accessibility label, action): chat ⇄ terminal for Claude in a terminal.
+    var switchView: (String, String, () -> Void)? = nil
     @Environment(HubStore.self) private var store
 
     var body: some View {
-        HStack {
+        HStack(spacing: 0) {
             IconButton(systemName: "line.3.horizontal", label: "Open sessions") {
                 withAnimation(.snappy) { store.drawerOpen = true }
             }
+            if switchView != nil { Color.clear.frame(width: 44, height: 44) } // keeps the title centred
             Spacer()
             Button(action: onMenu) {
                 VStack(spacing: 1) {
@@ -217,6 +321,9 @@ struct SessionHeader: View {
             .buttonStyle(.plain)
             .accessibilityHint("Session options")
             Spacer()
+            if let sw = switchView {
+                IconButton(systemName: sw.0, label: sw.1, action: sw.2)
+            }
             IconButton(systemName: "square.grid.2x2", label: "Outputs", action: onOutputs)
         }
         .padding(.horizontal, 10)
@@ -347,6 +454,93 @@ struct ApprovalCard: View {
         case "deny": "Denied"
         default: "Expired"
         }
+    }
+}
+
+/// A message held until Claude finishes its turn.
+struct QueuedBubble: View {
+    var text: String
+    var note = "Queued"
+    /// nil: can't be cancelled from the phone (it's in Claude's own queue).
+    var cancel: (() -> Void)?
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 4) {
+            Text(text)
+                .font(.body)
+                .padding(.horizontal, 16).padding(.vertical, 12)
+                .background(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Theme.hairline, style: StrokeStyle(lineWidth: 1, dash: [5, 4])))
+                .foregroundStyle(Theme.secondary)
+            HStack(spacing: 10) {
+                Label(note, systemImage: "clock").font(.caption)
+                if let cancel { Button("Cancel", action: cancel).font(.caption.weight(.medium)) }
+            }
+            .foregroundStyle(Theme.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+        .padding(.leading, 50)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Queued: \(text)")
+        .accessibilityAction(named: "Cancel") { cancel?() }
+    }
+}
+
+/// Claude's thinking (the short status lines Claude Code shows), dimmed; tap to expand.
+struct ThinkingText: View {
+    var text: String
+    @State private var expanded = false
+
+    var body: some View {
+        Button { withAnimation(.snappy) { expanded.toggle() } } label: {
+            Text(text)
+                .font(.subheadline)
+                .italic()
+                .foregroundStyle(Theme.secondary)
+                .lineLimit(expanded ? nil : 3)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Thinking: \(text)")
+        .accessibilityHint(expanded ? "Collapse" : "Show all")
+    }
+}
+
+/// A selection menu Claude is showing in its terminal UI (permission prompts and the like).
+struct TerminalPromptCard: View {
+    var prompt: TerminalPrompt
+    var choose: (String) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(prompt.question).font(.subheadline.weight(.medium))
+            if !prompt.context.isEmpty {
+                Text(prompt.context)
+                    .font(Theme.mono(.footnote))
+                    .padding(.horizontal, 12).padding(.vertical, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Theme.code, in: RoundedRectangle(cornerRadius: 10))
+                    .lineLimit(8)
+                    .textSelection(.enabled)
+            }
+            VStack(spacing: 8) {
+                ForEach(Array(prompt.options.enumerated()), id: \.element.key) { i, o in
+                    Button { choose(o.key) } label: {
+                        Text(o.label)
+                            .font(.subheadline.weight(.medium))
+                            .multilineTextAlignment(.leading)
+                            .padding(.vertical, 4)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(PillButtonStyle(kind: i == 0 ? .primary : .secondary))
+                    .accessibilityLabel("Option \(o.key): \(o.label)")
+                }
+            }
+        }
+        .padding(16)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Theme.needsBorder))
+        .accessibilityElement(children: .contain)
     }
 }
 
