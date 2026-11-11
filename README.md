@@ -10,6 +10,20 @@ protocol/  wire protocol: schema.json + route table
 mockups/   design source
 ```
 
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/01-home.jpg" width="150" alt="Home"><br><sub>Home</sub></td>
+    <td align="center"><img src="docs/screenshots/02-drawer.jpg" width="150" alt="Sessions"><br><sub>Sessions</sub></td>
+    <td align="center"><img src="docs/screenshots/03-claude-approval.jpg" width="150" alt="Claude approval"><br><sub>Claude approval</sub></td>
+    <td align="center"><img src="docs/screenshots/04-terminal.jpg" width="150" alt="Terminal"><br><sub>Terminal</sub></td>
+    <td align="center"><img src="docs/screenshots/05-outputs.jpg" width="150" alt="Outputs"><br><sub>Outputs</sub></td>
+  </tr>
+</table>
+
+<img src="docs/screenshots/06-macbar-menu.png" width="260" alt="Menu-bar app"><br><sub>The Mac menu-bar app</sub>
+
 ## Setup
 
 1. **Prerequisites:** `brew install node tmux xcodegen` and install **Tailscale** on the Mac and the iPhone, signed in to the same tailnet. Until Tailscale is up, the daemon listens on 127.0.0.1 only and the pairing QR has no host.
